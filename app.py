@@ -306,7 +306,9 @@ with aba_explorar:
     c_graf.plotly_chart(fig_disp, width="stretch")
     with c_txt:
         if len(filtro) >= 5:
-            rho = filtro["I3_pct_negra"].corr(filtro["renda_pc_mediana"], method="spearman")
+            # Spearman = correlação de Pearson entre os postos (ranks). Calculado assim
+            # para não depender do scipy, que o pandas exige no method="spearman".
+            rho = filtro["I3_pct_negra"].rank().corr(filtro["renda_pc_mediana"].rank())
             st.metric("Correlação de Spearman na seleção", br(rho, "{:+.2f}"),
                       help="Vai de −1 a +1. Negativa: onde há mais população negra, a renda mediana é menor.",
                       border=True)
