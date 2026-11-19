@@ -1,0 +1,23 @@
+# Estilo institucional: fundo branco, azul-marinho e verde, títulos serifados.
+# As fontes "sans-serif" e "serif" são a Source Sans e a Source Serif embutidas no
+# Streamlit, então funcionam mesmo sem acesso ao Google Fonts.
+[theme]
+base = "light"
+primaryColor = "#1b7f4c"
+backgroundColor = "#ffffff"
+secondaryBackgroundColor = "#f2f5f8"
+textColor = "#1a2433"
+linkColor = "#1b7f4c"
+borderColor = "#d5dde6"
+baseRadius = "small"
+font = "sans-serif"
+headingFont = "serif"
+headingFontWeights = [700, 700, 700, 700, 700, 700]
+dataframeHeaderBackgroundColor = "#e8eef4"
+
+[theme.sidebar]
+backgroundColor = "#0f2c4c"
+secondaryBackgroundColor = "#1d3f66"
+textColor = "#ffffff"
+primaryColor = "#4fbf85"
+borderColor = "#2c5280"
