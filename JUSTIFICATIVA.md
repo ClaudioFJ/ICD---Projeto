@@ -86,6 +86,8 @@ Também há dois controles de visualização:
 | Lista da Ficha do município | ✔ | ✔ | | | |
 | KPIs e gráfico da Ficha | | | | | ✔ |
 | Tabela e download | ✔ | ✔ | | | |
+| Cartões e gráficos de resíduo (Modelagem) | ✔ | ✔ | | | |
+| Lista do simulador (Modelagem) | ✔ | ✔ | | | |
 
 Exemplo: ao selecionar apenas **Leste** e **Sudoeste**, a renda mediana cai para
 0,91 SM (−0,16 em relação à RMSP), o esgoto adequado cai para 88,7% (−4,8 p.p.)
@@ -97,7 +99,7 @@ ranking continuam comparáveis entre seleções diferentes.
 
 ## 6. Gráficos interativos (Plotly, via `st.plotly_chart`)
 
-São cinco gráficos de três tipos: mapa coroplético, barras (horizontais, empilhadas e agrupadas) e dispersão. Todos mostram o valor ao passar o mouse e
+Nas abas de exploração são cinco gráficos de três tipos: mapa coroplético, barras (horizontais, empilhadas e agrupadas) e dispersão. A aba de modelagem acrescenta mais três (seção 8). Todos mostram o valor ao passar o mouse e
 permitem zoom e ocultar séries pela legenda.
 
 | Gráfico | Tipo | O que responde |
@@ -121,8 +123,19 @@ A aba **Sobre os dados** mostra a tabela da seleção, ordenada pelo IVSA, com
 barra de progresso para o índice. Serve para conferir os valores exatos que os
 gráficos resumem.
 
-## 8. Modelagem preditiva
+## 8. Modelagem preditiva (resultados da Parte 3)
 
-A aba já está montada e lê `data/resultados_modelo.csv` quando ele existir. Será
-completada com os resultados da Parte 3. As funções de `indicadores.py` e a base
-`rmsp_censo2022_modelagem.csv` já estão prontas para serem usadas nessa etapa.
+| Componente | Função na análise |
+|---|---|
+| `st.metric` (4 cartões) | Resumem a qualidade do modelo: tamanho da base, erro médio no teste (com o ganho sobre prever a média no `delta`), R² e erro médio na RMSP. |
+| `st.expander` com `st.dataframe` | Tabela completa de comparação dos modelos (validação, teste e estado novo). Fica recolhida porque é detalhe técnico. |
+| `st.metric` (3 cartões) da seleção | Quantos municípios estão abaixo do esperado, quantos domicílios isso representa e a diferença média. **Respondem aos filtros da barra lateral.** |
+| Dispersão previsto × observado | Mostra de uma vez quem está acima ou abaixo da linha "observado = previsto". |
+| Barras de resíduo | Ordena os municípios pelo déficit inesperado, com terracota para abaixo do esperado e verde para acima. |
+| Barras de importância | Mostram o que o modelo usa para prever. |
+| `st.selectbox` + 2 `st.slider` (simulador) | Escolhem o município e o cenário (variação da renda e da alfabetização). Os três cartões mostram observado, previsto hoje e previsto no cenário. São os únicos controles que mexem no modelo, por isso não repetem os filtros da barra lateral. |
+| `st.cache_resource` | Treina o modelo do simulador uma única vez por servidor, e não a cada clique. |
+
+Os filtros de sub-região e de renda da barra lateral também valem para esta aba:
+eles definem quais municípios aparecem nos cartões, nos dois gráficos de
+resíduo e na lista do simulador.

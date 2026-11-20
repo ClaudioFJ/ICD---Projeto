@@ -1,11 +1,11 @@
 # Data app: desigualdade, diversidade e saneamento na RMSP (Censo 2022)
 
 **Introdução à Ciência de Dados · Sistemas para Internet · Projeto Tema 2, Parte 2**
-Trabalho individual.
+Trabalho individual · Claudio Ferreira Junior
 
 Aplicação interativa em Streamlit que reúne os indicadores da Parte 1 sobre os
-39 municípios da Região Metropolitana de São Paulo e reserva uma área para os
-resultados da modelagem preditiva da Parte 3.
+39 municípios da Região Metropolitana de São Paulo e os resultados da modelagem
+preditiva da Parte 3 (previsão do % de domicílios com esgoto adequado).
 
 ## Estrutura do projeto
 
@@ -13,12 +13,17 @@ resultados da modelagem preditiva da Parte 3.
 .
 ├── app.py                         # aplicação Streamlit
 ├── indicadores.py                 # cálculo dos indicadores I1 a I7 (mesmas fórmulas do notebook)
+├── modelo.py                      # reconstrução do modelo da Parte 3 para o simulador
+├── notebooks/
+│   └── rmsp_parte3_modelagem.ipynb    # treino e avaliação do modelo (Parte 3)
 ├── requirements.txt               # dependências
 ├── JUSTIFICATIVA.md               # componentes do Streamlit e função de cada um
 ├── .streamlit/config.toml         # tema visual
 └── data/
     ├── rmsp_censo2022_tratado.csv     # base tratada na Parte 1 (39 municípios)
-    ├── rmsp_censo2022_modelagem.csv   # base codificada e padronizada (para a Parte 3)
+    ├── brasil_modelagem.csv           # 5.570 municípios usados no treino (gerado na Parte 3)
+    ├── resultados_modelo.json         # métricas, modelo escolhido e importância (Parte 3)
+    ├── rmsp_previsoes.csv             # observado, previsto e resíduo dos 39 municípios (Parte 3)
     └── rmsp_municipios.geojson        # limites municipais (IBGE, via tbrugz/geodata-br)
 ```
 
@@ -70,8 +75,16 @@ arquivo estiver fora do formato, volta para a base padrão.
 | **Visão geral** | 8 KPIs (`st.metric`) da seleção comparados com a RMSP e os principais achados da Parte 1 |
 | **Explorar indicadores** | Mapa coroplético, ranking, dispersão raça × renda com correlação de Spearman e déficit de saneamento em % ou em número de domicílios. Botão para baixar os dados da seleção |
 | **Ficha do município** | KPIs de um município comparados com a RMSP e gráfico dos componentes do IVSA |
-| **Modelagem preditiva** | Espaço reservado para a Parte 3. O app lê `data/resultados_modelo.csv` automaticamente quando o arquivo existir |
+| **Modelagem preditiva** | Métricas dos modelos, previsto × observado, municípios abaixo do esperado ("déficit inesperado"), importância das variáveis e simulador de cenários |
 | **Sobre os dados** | Fontes, pré-processamento, dicionário de indicadores e tabela da seleção |
+
+## Atualizar os resultados do modelo
+
+Rode `notebooks/rmsp_parte3_modelagem.ipynb` (ele baixa os dados do IBGE se
+não encontrar os arquivos) e copie para `data/` os três arquivos que ele gera:
+`resultados_modelo.json`, `rmsp_previsoes.csv` e `brasil_modelagem.csv`. O
+simulador treina o modelo de novo a partir desses arquivos na primeira vez que a
+aba é aberta (alguns segundos), então não há arquivo de modelo salvo para manter.
 
 ## Publicar no Streamlit Community Cloud (opcional)
 

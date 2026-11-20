@@ -1,0 +1,142 @@
+{
+  "modelo_escolhido": "Gradient Boosting",
+  "parametros": {
+    "l2_regularization": 1.0,
+    "learning_rate": 0.03,
+    "max_features": 1.0,
+    "max_iter": 600,
+    "max_leaf_nodes": 15,
+    "min_samples_leaf": 20,
+    "random_state": 42
+  },
+  "numericas": [
+    "log_populacao",
+    "log_pib_pc",
+    "log_renda_mediana",
+    "razao_media_mediana",
+    "taxa_alfab_15m",
+    "pct_negra",
+    "pct_indigena",
+    "pct_amarela"
+  ],
+  "n_treino": 4456,
+  "n_teste": 1114,
+  "n_total": 5570,
+  "metricas": [
+    {
+      "modelo": "Linha de base (média)",
+      "MAE_cv": 26.137,
+      "MAE_cv_dp": 0.4532,
+      "RMSE_cv": 30.128,
+      "R2_cv": -0.0034,
+      "R2_cv_dp": 0.0031,
+      "MAE_teste": 26.2922,
+      "RMSE_teste": 30.1934,
+      "R2_teste": -0.0018
+    },
+    {
+      "modelo": "Regressão Ridge",
+      "MAE_cv": 16.3012,
+      "MAE_cv_dp": 0.323,
+      "RMSE_cv": 20.4403,
+      "R2_cv": 0.5379,
+      "R2_cv_dp": 0.0172,
+      "MAE_teste": 16.7249,
+      "RMSE_teste": 20.7364,
+      "R2_teste": 0.5275
+    },
+    {
+      "modelo": "Random Forest",
+      "MAE_cv": 15.6151,
+      "MAE_cv_dp": 0.4784,
+      "RMSE_cv": 19.9579,
+      "R2_cv": 0.5595,
+      "R2_cv_dp": 0.0177,
+      "MAE_teste": 15.9851,
+      "RMSE_teste": 19.9719,
+      "R2_teste": 0.5617
+    },
+    {
+      "modelo": "Gradient Boosting",
+      "MAE_cv": 15.4188,
+      "MAE_cv_dp": 0.5044,
+      "RMSE_cv": 19.9672,
+      "R2_cv": 0.5591,
+      "R2_cv_dp": 0.0189,
+      "MAE_teste": 15.6594,
+      "RMSE_teste": 19.8578,
+      "R2_teste": 0.5667
+    }
+  ],
+  "espacial": [
+    {
+      "modelo": "Linha de base (média)",
+      "MAE_uf_nova": 27.0828,
+      "R2_uf_nova": -0.2558
+    },
+    {
+      "modelo": "Regressão Ridge",
+      "MAE_uf_nova": 18.0725,
+      "R2_uf_nova": 0.3503
+    },
+    {
+      "modelo": "Random Forest",
+      "MAE_uf_nova": 18.1745,
+      "R2_uf_nova": 0.3501
+    },
+    {
+      "modelo": "Gradient Boosting",
+      "MAE_uf_nova": 18.1026,
+      "R2_uf_nova": 0.3306
+    }
+  ],
+  "importancia": [
+    {
+      "variavel": "UF (estado)",
+      "aumento_MAE": 5.6352,
+      "dp": 0.2603
+    },
+    {
+      "variavel": "Alfabetização 15+",
+      "aumento_MAE": 3.9694,
+      "dp": 0.1579
+    },
+    {
+      "variavel": "Renda mediana (log)",
+      "aumento_MAE": 1.8966,
+      "dp": 0.1123
+    },
+    {
+      "variavel": "População (log)",
+      "aumento_MAE": 1.4914,
+      "dp": 0.1953
+    },
+    {
+      "variavel": "PIB per capita (log)",
+      "aumento_MAE": 0.5818,
+      "dp": 0.0758
+    },
+    {
+      "variavel": "% população negra",
+      "aumento_MAE": 0.4675,
+      "dp": 0.1123
+    },
+    {
+      "variavel": "% população amarela",
+      "aumento_MAE": 0.1982,
+      "dp": 0.0896
+    },
+    {
+      "variavel": "% população indígena",
+      "aumento_MAE": 0.1619,
+      "dp": 0.0573
+    },
+    {
+      "variavel": "Razão média/mediana da renda",
+      "aumento_MAE": 0.0654,
+      "dp": 0.0502
+    }
+  ],
+  "mae_oof_brasil": 15.39,
+  "mae_oof_rmsp": 6.8968
+}

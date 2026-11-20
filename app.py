@@ -8,17 +8,21 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 
+from modelo import cenario, montar_X, treinar
 from indicadores import (INDICADORES, SM_2022, SUBREGIOES, calcular_indicadores,
                          resumo, validar_base)
 
 PASTA = Path(__file__).parent
 ARQ_DADOS = PASTA / "data" / "rmsp_censo2022_tratado.csv"
 ARQ_GEO = PASTA / "data" / "rmsp_municipios.geojson"
-ARQ_MODELO = PASTA / "data" / "resultados_modelo.csv"  # gerado na Parte 3
+ARQ_RESULTADOS = PASTA / "data" / "resultados_modelo.json"  # gerados no notebook da Parte 3
+ARQ_PREVISOES = PASTA / "data" / "rmsp_previsoes.csv"
+ARQ_BRASIL = PASTA / "data" / "brasil_modelagem.csv"
 
 # Cores fixas por sub-região: a cor acompanha a sub-região, nunca a posição,
 # então filtrar não repinta as que sobram.
@@ -91,6 +95,27 @@ def carregar_base(conteudo: bytes | None) -> pd.DataFrame:
 @st.cache_data
 def carregar_geojson() -> dict:
     return json.loads(ARQ_GEO.read_text(encoding="utf-8"))
+
+
+@st.cache_data
+def carregar_resultados() -> dict:
+    return json.loads(ARQ_RESULTADOS.read_text(encoding="utf-8"))
+
+
+@st.cache_data
+def carregar_previsoes() -> pd.DataFrame:
+    return pd.read_csv(ARQ_PREVISOES)
+
+
+@st.cache_data
+def carregar_brasil() -> pd.DataFrame:
+    return pd.read_csv(ARQ_BRASIL)
+
+
+@st.cache_resource(show_spinner="Treinando o modelo do simulador...")
+def treinar_modelo():
+    """Treina uma vez por sessão do servidor; o mesmo modelo é reaproveitado."""
+    return treinar(carregar_brasil(), carregar_resultados())
 
 
 # ----------------------------------------------------------------------------
@@ -426,21 +451,176 @@ with aba_muni:
 # Aba 4 — Modelagem preditiva (Parte 3)
 # ----------------------------------------------------------------------------
 with aba_modelo:
-    st.subheader("Modelagem preditiva")
-    if ARQ_MODELO.exists():
-        resultados = pd.read_csv(ARQ_MODELO)
-        st.dataframe(resultados, width="stretch", hide_index=True)
+    if not (ARQ_RESULTADOS.exists() and ARQ_PREVISOES.exists() and ARQ_BRASIL.exists()):
+        st.info("Os resultados da Parte 3 ainda não estão na pasta `data/`. Rode o notebook "
+                "`rmsp_parte3_modelagem.ipynb` e copie `resultados_modelo.json`, `rmsp_previsoes.csv` "
+                "e `brasil_modelagem.csv` para cá.", icon="🛠️")
     else:
-        st.info("**Em construção.** Esta seção vai receber os resultados da Parte 3 do projeto "
-                "(modelagem preditiva). A estrutura do app já está preparada para isso.", icon="🛠️")
+        info = carregar_resultados()
+        metr = pd.DataFrame(info["metricas"]).set_index("modelo")
+        escolhido = info["modelo_escolhido"]
+        m_esc = metr.loc[escolhido]
+
+        st.subheader("O saneamento da RMSP está onde o perfil dos municípios indica?")
         st.markdown(
-            "**O que já está pronto para a Parte 3**\n\n"
-            "- A base `rmsp_censo2022_modelagem.csv`, gerada na Parte 1, com variáveis codificadas "
-            "(one-hot das sub-regiões, porte e faixa de renda ordinais) e padronizadas (z-score).\n"
-            "- As funções de cálculo dos indicadores em `indicadores.py`, que o modelo pode reutilizar.\n"
-            "- Esta aba lê automaticamente `data/resultados_modelo.csv` quando o arquivo existir.\n\n"
-            "**Limite a considerar:** a base tem 39 municípios. Qualquer modelo treinado nela precisa de "
-            "validação cruzada e deve ser lido como exploratório.")
+            "Um modelo de regressão prevê o **% de domicílios com esgoto adequado** (rede geral ou fossa "
+            "séptica) a partir do perfil do município: renda, alfabetização, porte, PIB, composição racial e "
+            "estado. Como a RMSP tem só 39 municípios, o modelo foi treinado com os "
+            f"**{br(info['n_total'], '{:,.0f}')} municípios do Brasil** e depois aplicado à região. A diferença entre o "
+            "observado e o previsto mostra **quem está pior do que o seu perfil explica**.")
+
+        st.markdown(f"Modelo escolhido: **{escolhido}**, o de menor erro médio na validação cruzada entre "
+                    f"{len(metr) - 1} modelos testados (mais uma linha de base).")
+        c = st.columns(4)
+        c[0].metric("Municípios no treino e teste", br(info["n_total"], "{:,.0f}"), border=True,
+                    help="Todos os municípios do Brasil com dados do Censo 2022.")
+        c[1].metric("Erro médio no teste (MAE)", br(m_esc["MAE_teste"], "{:.1f}") + " p.p.",
+                    delta=br(m_esc["MAE_teste"] - metr.loc["Linha de base (média)", "MAE_teste"], "{:+.1f}")
+                    + " p.p. vs. prever a média", delta_color="inverse", border=True,
+                    help=f"Avaliado em {info['n_teste']:,} municípios que o modelo não viu no treino.".replace(",", "."))
+        c[2].metric("R² no teste", br(m_esc["R2_teste"], "{:.2f}"), border=True,
+                    help="Fração da variação entre municípios explicada pelo modelo (0 a 1).")
+        c[3].metric("Erro médio na RMSP", br(info["mae_oof_rmsp"], "{:.1f}") + " p.p.",
+                    border=True, help="Média nos 39 municípios. Previsão fora da amostra: cada município foi previsto por um modelo "
+                                      "que não o viu no treino.")
+
+        with st.expander("Comparação dos modelos e como foram avaliados"):
+            tab = metr[["MAE_cv", "R2_cv", "MAE_teste", "RMSE_teste", "R2_teste"]].copy()
+            esp = pd.DataFrame(info["espacial"]).set_index("modelo")
+            tab = tab.join(esp)
+            st.dataframe(tab, width="stretch", column_config={
+                "MAE_cv": st.column_config.NumberColumn("MAE validação", format="%.2f"),
+                "R2_cv": st.column_config.NumberColumn("R² validação", format="%.2f"),
+                "MAE_teste": st.column_config.NumberColumn("MAE teste", format="%.2f"),
+                "RMSE_teste": st.column_config.NumberColumn("RMSE teste", format="%.2f"),
+                "R2_teste": st.column_config.NumberColumn("R² teste", format="%.2f"),
+                "MAE_uf_nova": st.column_config.NumberColumn("MAE estado novo", format="%.2f"),
+                "R2_uf_nova": st.column_config.NumberColumn("R² estado novo", format="%.2f")})
+            st.caption(
+                f"Treino: {info['n_treino']:,} municípios, com validação cruzada de 5 partes para comparar "
+                f"modelos e ajustar hiperparâmetros. Teste: {info['n_teste']:,} municípios separados no "
+                "início e usados uma única vez. \"Estado novo\": validação agrupada por UF, em que o modelo "
+                "prevê estados inteiros que não viu. O erro maior mostra que parte do saneamento depende de "
+                "fatores estaduais.".replace(",", "."))
+
+        st.divider()
+        prev = carregar_previsoes()
+        prev_sel = prev[prev["cod_ibge"].isin(filtro["cod_ibge"])]
+        st.subheader("Déficit inesperado na seleção")
+        abaixo = (prev_sel["residuo"] < 0).sum()
+        k = st.columns(3)
+        k[0].metric("Municípios abaixo do esperado", f"{abaixo} de {len(prev_sel)}", border=True)
+        k[1].metric("Domicílios em déficit inesperado", br(prev_sel["dom_deficit_inesperado"].sum(), "{:,.0f}"),
+                    border=True, help="Domicílios sem esgoto adequado além do que o modelo prevê para o perfil "
+                                      "de cada município (soma só onde o observado está abaixo do previsto).")
+        k[2].metric("Diferença média (observado − previsto)", br(prev_sel["residuo"].mean(), "{:+.1f}") + " p.p.",
+                    border=True)
+
+        g1, g2 = st.columns([1, 1.15])
+        # Previsto x observado
+        fig_po = go.Figure()
+        fig_po.add_trace(go.Scatter(x=[55, 100], y=[55, 100], mode="lines", name="Observado = previsto",
+                                    line=dict(color=TEXTO_2, dash="dot", width=1.5), hoverinfo="skip"))
+        for sub in SUBREGIOES:
+            d = prev_sel[prev_sel["sub_regiao"] == sub]
+            if d.empty:
+                continue
+            fig_po.add_trace(go.Scatter(
+                x=d["previsto"], y=d["pct_esgoto_adequado"], mode="markers", name=sub,
+                marker=dict(color=CORES_SUB[sub], symbol=SIMBOLOS_SUB[sub], size=11,
+                            line=dict(color="white", width=1.5)),
+                customdata=list(zip(d["municipio"], d["residuo"].map(lambda v: br(v, "{:+.1f}")))),
+                hovertemplate="<b>%{customdata[0]}</b><br>Previsto: %{x:.1f}%<br>Observado: %{y:.1f}%"
+                              "<br>Diferença: %{customdata[1]} p.p.<extra>" + sub + "</extra>"))
+        layout_padrao(fig_po, altura=460)
+        fig_po.update_xaxes(title="Previsto pelo modelo (% esgoto adequado)", ticksuffix="%")
+        fig_po.update_yaxes(title="Observado no Censo 2022", ticksuffix="%")
+        g1.markdown("**Previsto × observado**")
+        g1.plotly_chart(fig_po, width="stretch")
+        g1.caption("Abaixo da linha pontilhada: o município tem menos esgoto adequado do que o perfil indica.")
+
+        # Resíduos ordenados
+        d = prev_sel.sort_values("residuo", ascending=False)
+        fig_res = go.Figure(go.Bar(
+            x=d["residuo"], y=d["municipio"], orientation="h",
+            marker=dict(color=[TERRACOTA if v < 0 else VERDE for v in d["residuo"]], cornerradius=3),
+            customdata=list(zip(d["pct_esgoto_adequado"], d["previsto"],
+                                d["dom_deficit_inesperado"].map(lambda v: br(v, "{:,.0f}")))),
+            hovertemplate="<b>%{y}</b><br>Observado: %{customdata[0]:.1f}%<br>Previsto: %{customdata[1]:.1f}%"
+                          "<br>Diferença: %{x:+.1f} p.p.<br>Domicílios em déficit inesperado: %{customdata[2]}"
+                          "<extra></extra>"))
+        layout_padrao(fig_res, altura=max(360, 16 * len(d) + 80), bargap=0.25, showlegend=False)
+        fig_res.update_xaxes(title="Observado − previsto (p.p.)")
+        fig_res.update_yaxes(tickfont=dict(size=11), gridcolor="rgba(0,0,0,0)", automargin=True)
+        fig_res.update_layout(margin=dict(l=150))
+        g2.markdown("**Quem está abaixo do esperado** (terracota) **e acima** (verde)")
+        g2.plotly_chart(fig_res, width="stretch")
+
+        st.markdown(
+            "**Leitura (RMSP completa).** Os maiores déficits inesperados estão nas franjas da metrópole (Santa Isabel, "
+            "Mairiporã, Embu-Guaçu, Juquitiba, Pirapora do Bom Jesus), em áreas de mananciais e de expansão "
+            "periurbana. Ali a renda e a escolaridade fariam esperar uma cobertura bem maior. Cotia e Santana de "
+            "Parnaíba, municípios de renda alta, também ficam abaixo do esperado, provavelmente por causa dos "
+            "condomínios e loteamentos fora da rede. São bons candidatos a priorização de investimento e a "
+            "investigação das causas.")
+
+        st.divider()
+        st.subheader("O que mais pesa na previsão")
+        imp = pd.DataFrame(info["importancia"]).sort_values("aumento_MAE")
+        fig_imp = go.Figure(go.Bar(
+            x=imp["aumento_MAE"], y=imp["variavel"], orientation="h",
+            error_x=dict(type="data", array=imp["dp"], color=TEXTO_2, thickness=1),
+            marker=dict(color=VERDE, cornerradius=3),
+            hovertemplate="%{y}: +%{x:.2f} p.p. no erro<extra></extra>"))
+        layout_padrao(fig_imp, altura=340, showlegend=False)
+        fig_imp.update_xaxes(title="Quanto o erro médio (MAE) piora ao embaralhar a variável (p.p.)")
+        fig_imp.update_yaxes(gridcolor="rgba(0,0,0,0)")
+        i1, i2 = st.columns([1.4, 1])
+        i1.plotly_chart(fig_imp, width="stretch")
+        i2.markdown(
+            "O **estado** é a variável mais importante: companhia de saneamento, investimento histórico e "
+            "regulação variam de UF para UF. Em seguida vêm **alfabetização**, **renda** e **porte** do "
+            "município. A composição racial pesa pouco *depois* que renda e escolaridade entram no modelo.")
+        i2.caption("Importância por permutação, medida no conjunto de teste (10 repetições; a barra fina é "
+                   "o desvio-padrão).")
+
+        st.divider()
+        st.subheader("Simulador de cenários")
+        st.markdown(
+            "Escolha um município e altere renda e alfabetização para ver como a previsão do modelo muda. "
+            "**Atenção:** o modelo mede associação, não causa. O resultado indica o nível de saneamento de "
+            "municípios brasileiros com aquele perfil, não o efeito garantido de uma política.")
+        s1, s2 = st.columns([1, 1.3])
+        with s1:
+            nomes_sim = sorted(prev_sel["municipio"])
+            nome_sim = st.selectbox("Município simulado", nomes_sim,
+                                    index=nomes_sim.index("Juquitiba") if "Juquitiba" in nomes_sim else 0)
+            var_renda = st.slider("Variação da renda per capita (%)", -30, 100, 20, step=5,
+                                  help="Aplicada à renda média e à mediana (a concentração de renda não muda).")
+            var_alfab = st.slider("Variação da alfabetização 15+ (p.p.)", 0.0, 5.0, 0.0, step=0.5, format="%.1f")
+        modelo_sim, colunas_sim = treinar_modelo()
+        brasil = carregar_brasil()
+        linha = brasil[brasil["cod_ibge"] == prev_sel.loc[prev_sel["municipio"] == nome_sim, "cod_ibge"].iloc[0]].iloc[0]
+        nova = cenario(linha, var_renda, var_alfab)
+        X_atual = montar_X(pd.DataFrame([linha]), info["numericas"], colunas_sim)
+        X_novo = montar_X(pd.DataFrame([nova]), info["numericas"], colunas_sim)
+        p_atual = float(np.clip(modelo_sim.predict(X_atual)[0], 0, 100))
+        p_novo = float(np.clip(modelo_sim.predict(X_novo)[0], 0, 100))
+        with s2:
+            r = st.columns(3)
+            r[0].metric("Observado (2022)", br(linha["pct_esgoto_adequado"], "{:.1f}%"), border=True)
+            r[1].metric("Previsto hoje", br(p_atual, "{:.1f}%"), border=True)
+            r[2].metric("Previsto no cenário", br(p_novo, "{:.1f}%"),
+                        delta=br(p_novo - p_atual, "{:+.1f}") + " p.p.", border=True)
+            st.markdown(
+                f"Renda mediana: R$ {br(linha['renda_pc_mediana'], '{:,.0f}')} → "
+                f"**R$ {br(linha['renda_pc_mediana'] * (1 + var_renda / 100), '{:,.0f}')}**  ·  "
+                f"Alfabetização: {br(linha['taxa_alfab_15m'], '{:.1f}')}% → "
+                f"**{br(nova['taxa_alfab_15m'], '{:.1f}')}%**")
+            st.caption("No simulador, o modelo é treinado com todos os municípios do Brasil, por isso a previsão "
+                       "do perfil atual pode diferir um pouco da previsão fora da amostra usada nos gráficos "
+                       "acima. Modelos de árvore não extrapolam: além da faixa de renda observada no Brasil, a "
+                       "previsão para de mudar.")
 
 
 # ----------------------------------------------------------------------------
